@@ -79,6 +79,7 @@ cleanup:
         perror("close connection socket");
         exit_code = 1;
     }
+
     if (close(listen_fd) == -1)
     {
         perror("close listening socket");
