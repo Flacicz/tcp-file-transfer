@@ -6,6 +6,7 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <string.h>
 
 int main(void)
 {
@@ -43,7 +44,7 @@ int main(void)
     int exit_code = 0;
     int connection_fd = -1;
 
-    if (bind(listen_fd, (const struct sockaddr *)&address, sizeof(address)) == -1)
+    if (bind(listen_fd, (const struct sockaddr*)&address, sizeof(address)) == -1)
     {
         perror("bind");
         exit_code = 1;
@@ -62,7 +63,8 @@ int main(void)
     do
     {
         connection_fd = accept(listen_fd, NULL, NULL);
-    } while (connection_fd == -1 && errno == EINTR);
+    }
+    while (connection_fd == -1 && errno == EINTR);
 
     if (connection_fd == -1)
     {
@@ -72,6 +74,48 @@ int main(void)
     }
 
     printf("Server accept connection\n");
+
+    char buffer[5];
+    size_t recv_count = 0;
+
+    while (recv_count < 5)
+    {
+        const ssize_t recv_result =
+            recv(connection_fd, buffer + recv_count, sizeof(buffer) - recv_count, 0);
+
+        if (recv_result == 0)
+        {
+            fprintf(stderr,
+                    "Incomplete message: received %zu of %zu bytes before end of stream\n",
+                    recv_count, sizeof(buffer));
+            exit_code = 1;
+            goto cleanup;
+        }
+
+        if (recv_result == -1 && errno == EINTR)
+        {
+            continue;
+        }
+        if (recv_result == -1)
+        {
+            perror("recv");
+            exit_code = 1;
+            goto cleanup;
+        }
+
+        recv_count += recv_result;
+    }
+
+    const char expected[] = "HELLO";
+
+    if (memcmp(buffer, expected, sizeof(expected) - 1) != 0)
+    {
+        fprintf(stderr, "Invalid message: expected HELLO\n");
+        exit_code = 1;
+        goto cleanup;
+    }
+
+    printf("Received and verified HELLO\n");
 
 cleanup:
     if (connection_fd >= 0 && close(connection_fd) == -1)

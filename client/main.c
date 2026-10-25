@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stdio.h>
 #include <unistd.h>
 #include <arpa/inet.h>
@@ -48,6 +49,39 @@ int main(void)
     }
 
     printf("Client connect successfully\n");
+
+    const char buffer[] = "HELLO";
+    size_t send_count = 0;
+
+    while (send_count < 5)
+    {
+        const ssize_t send_result =
+            send(connect_fd, buffer + send_count, sizeof(buffer) - send_count - 1, MSG_NOSIGNAL);
+
+        if (send_result == 0)
+        {
+            fprintf(stderr,
+                    "send returned 0 before the message was fully sent (%zu of 5 bytes sent)\n",
+                    send_count);
+            exit_code = 1;
+            goto cleanup;
+        }
+
+        if (send_result == -1 && errno == EINTR)
+        {
+            continue;
+        }
+        if (send_result == -1)
+        {
+            perror("send");
+            exit_code = 1;
+            goto cleanup;
+        }
+
+        send_count += send_result;
+    }
+
+    printf("Sent 5 message bytes to the socket\n");
 
 cleanup:
     if (close(connect_fd) == -1)
