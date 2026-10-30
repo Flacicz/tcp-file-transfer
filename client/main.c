@@ -6,6 +6,8 @@
 #include <sys/socket.h>
 #include <stdint.h>
 
+ssize_t receive_status(int connection_fd, uint8_t* status);
+
 int main(void)
 {
     const int address_family = AF_INET;
@@ -83,6 +85,36 @@ int main(void)
 
     printf("Sent 5 message bytes to the socket\n");
 
+    uint8_t status;
+    const ssize_t receive_result = receive_status(connect_fd, &status);
+    if (receive_result == 0)
+    {
+        fprintf(stderr, "Server closed the stream without a status byte\n");
+        exit_code = 1;
+        goto cleanup;
+    }
+    if (receive_result == -1)
+    {
+        perror("receive status");
+        exit_code = 1;
+        goto cleanup;
+    }
+
+    if (status == 0)
+    {
+        printf("Server confirmed HELLO\n");
+    }
+    else if (status == 1)
+    {
+        fprintf(stderr, "Server reported an error\n");
+        exit_code = 1;
+    }
+    else
+    {
+        fprintf(stderr, "Unknown status byte: 0x%02X\n", (unsigned int)status);
+        exit_code = 1;
+    }
+
 cleanup:
     if (close(connect_fd) == -1)
     {
@@ -91,4 +123,17 @@ cleanup:
     }
 
     return exit_code;
+}
+
+ssize_t receive_status(const int connection_fd, uint8_t* status)
+{
+    ssize_t receive_result;
+
+    do
+    {
+        receive_result = recv(connection_fd, status, sizeof(*status), 0);
+    }
+    while (receive_result == -1 && errno == EINTR);
+
+    return receive_result;
 }

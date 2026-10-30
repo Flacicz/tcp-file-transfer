@@ -6,7 +6,10 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
+
+ssize_t send_status(int connection_fd, uint8_t status);
 
 int main(void)
 {
@@ -108,14 +111,42 @@ int main(void)
 
     const char expected[] = "HELLO";
 
+    uint8_t status = 0;
+
     if (memcmp(buffer, expected, sizeof(expected) - 1) != 0)
     {
         fprintf(stderr, "Invalid message: expected HELLO\n");
         exit_code = 1;
+
+        status = 1;
+        const ssize_t send_result = send_status(connection_fd, status);
+        if (send_result == 0)
+        {
+            fprintf(stderr, "send returned 0 before the status byte was sent\n");
+            exit_code = 1;
+        }
+        else if (send_result == -1)
+        {
+            perror("send status");
+            exit_code = 1;
+        }
+
         goto cleanup;
     }
 
     printf("Received and verified HELLO\n");
+
+    const ssize_t send_result = send_status(connection_fd, status);
+    if (send_result == 0)
+    {
+        fprintf(stderr, "send returned 0 before the status byte was sent\n");
+        exit_code = 1;
+    }
+    else if (send_result == -1)
+    {
+        perror("send status");
+        exit_code = 1;
+    }
 
 cleanup:
     if (connection_fd >= 0 && close(connection_fd) == -1)
@@ -131,4 +162,17 @@ cleanup:
     }
 
     return exit_code;
+}
+
+ssize_t send_status(const int connection_fd, const uint8_t status)
+{
+    ssize_t send_result;
+
+    do
+    {
+        send_result = send(connection_fd, &status, sizeof(status), MSG_NOSIGNAL);
+    }
+    while (send_result == -1 && errno == EINTR);
+
+    return send_result;
 }
